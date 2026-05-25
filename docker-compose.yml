@@ -1,0 +1,86 @@
+# Phase 1 infrastructure — persistent services only (no serverless).
+# Agent engine runs on Docker/VPS per Document 2 deployment constraint.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ava
+      POSTGRES_PASSWORD: ava
+      POSTGRES_DB: ava
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ava -d ava"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ava:ava@postgres:5432/ava
+      LANGGRAPH_DATABASE_URL: postgresql://ava:ava@postgres:5432/ava
+      REDIS_URL: redis://redis:6379/0
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LITELLM_MODEL: ${LITELLM_MODEL:-gpt-4o}
+      CORS_ORIGINS: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api/src:/app/src:ro
+    command: >
+      sh -c "python -m ava_api.db migrate &&
+             uvicorn ava_api.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ava:ava@postgres:5432/ava
+      LANGGRAPH_DATABASE_URL: postgresql://ava:ava@postgres:5432/ava
+      REDIS_URL: redis://redis:6379/0
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LITELLM_MODEL: ${LITELLM_MODEL:-gpt-4o}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: arq ava_api.worker.WorkerSettings
+
+  nango:
+    image: nangohq/nango-server:hosted
+    ports:
+      - "3003:3003"
+    environment:
+      NANGO_SECRET_KEY: ${NANGO_SECRET_KEY:-dev-nango-secret}
+      NANGO_DATABASE_URL: postgresql://ava:ava@postgres:5432/nango
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - connectors
+
+volumes:
+  postgres_data:

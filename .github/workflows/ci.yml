@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ava
+          POSTGRES_PASSWORD: ava
+          POSTGRES_DB: ava
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install API
+        working-directory: apps/api
+        run: |
+          pip install -e ".[dev]"
+
+      - name: Ruff check
+        working-directory: apps/api
+        run: pip install ruff && ruff check src tests
+
+      - name: Unit tests
+        working-directory: apps/api
+        env:
+          MOCK_LLM: "true"
+          DATABASE_URL: postgresql+asyncpg://ava:ava@localhost:5432/ava
+          LANGGRAPH_DATABASE_URL: postgresql://ava:ava@localhost:5432/ava
+          REDIS_URL: redis://localhost:6379/0
+        run: pytest -q
+
+      - name: Phase 1 go/no-go (integration)
+        working-directory: apps/api
+        env:
+          MOCK_LLM: "true"
+          DATABASE_URL: postgresql+asyncpg://ava:ava@localhost:5432/ava
+          LANGGRAPH_DATABASE_URL: postgresql://ava:ava@localhost:5432/ava
+          REDIS_URL: redis://localhost:6379/0
+        run: python ../../scripts/test_phase1.py
+
+      - name: Phase 2 go/no-go (swarm integration)
+        working-directory: apps/api
+        env:
+          MOCK_LLM: "true"
+          DATABASE_URL: postgresql+asyncpg://ava:ava@localhost:5432/ava
+          LANGGRAPH_DATABASE_URL: postgresql://ava:ava@localhost:5432/ava
+          REDIS_URL: redis://localhost:6379/0
+        run: python ../../scripts/test_phase2.py
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Build
+        working-directory: apps/web
+        run: npm run build

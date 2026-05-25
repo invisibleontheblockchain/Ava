@@ -1,0 +1,64 @@
+[project]
+name = "ava-api"
+version = "1.0.0"
+description = "Ava agent execution API — FastAPI + LangGraph (Phases 1–5)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "httpx>=0.28.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.3.0",
+    "litellm>=1.55.0",
+    "langgraph>=0.2.60",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "psycopg[binary,pool]>=3.2.0",
+    "networkx>=3.4.0",
+    "redis>=5.2.0",
+    "arq>=0.26.1",
+    "python-multipart>=0.0.12",
+    "python-pptx>=1.0.2",
+    "python-docx>=1.1.0",
+    "xlsxwriter>=3.2.0",
+    "openpyxl>=3.1.0",
+    "authlib>=1.3.0",
+    "python-jose[cryptography]>=3.3.0",
+    "typer>=0.12.0",
+    "bleach>=6.2.0",
+    "numpy>=2.0.0",
+    "opentelemetry-api>=1.28.0",
+    "opentelemetry-sdk>=1.28.0",
+    "opentelemetry-instrumentation-fastapi>=0.49b0",
+    "fastmcp>=2.0.0",
+    "pgvector>=0.3.0",
+    "boto3>=1.35.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+]
+
+[project.scripts]
+ava = "ava_api.cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ava_api"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

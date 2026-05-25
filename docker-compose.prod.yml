@@ -1,0 +1,76 @@
+# Production self-host stack (Phase 5) — `ava start --production`
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ava
+      POSTGRES_PASSWORD: ava
+      POSTGRES_DB: ava
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ava -d ava"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ava:ava@postgres:5432/ava
+      LANGGRAPH_DATABASE_URL: postgresql://ava:ava@postgres:5432/ava
+      REDIS_URL: redis://redis:6379/0
+      MOCK_LLM: ${MOCK_LLM:-true}
+      CORS_ORIGINS: http://localhost:3000
+      COLLAB_WS_URL: ws://collab:1234
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "python -m ava_api.db migrate && uvicorn ava_api.main:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    build:
+      context: ./apps/api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ava:ava@postgres:5432/ava
+      LANGGRAPH_DATABASE_URL: postgresql://ava:ava@postgres:5432/ava
+      REDIS_URL: redis://redis:6379/0
+      MOCK_LLM: ${MOCK_LLM:-true}
+    depends_on:
+      - api
+    command: arq ava_api.worker.WorkerSettings
+
+  collab:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./services/collab:/app
+    ports:
+      - "1234:1234"
+    command: sh -c "npm install && node server.js"
+
+  web:
+    build:
+      context: ./apps/web
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_COLLAB_WS_URL: ws://localhost:1234
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

@@ -1,0 +1,9 @@
+{
+  "name": "ava-collab",
+  "private": true,
+  "dependencies": {
+    "y-websocket": "^2.0.4",
+    "ws": "^8.18.0",
+    "yjs": "^13.6.0"
+  }
+}
